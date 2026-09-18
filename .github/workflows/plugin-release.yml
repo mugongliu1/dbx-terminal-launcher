@@ -1,0 +1,27 @@
+name: Release DBX plugin
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release-tag:
+        description: Existing GitHub Release tag that receives the plugin assets
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    uses: t8y2/dbx/.github/workflows/plugin-release-reusable.yml@d50f5175d62b27a5dd201f67a14dcf21e45b2104
+    with:
+      release-tag: ${{ github.event.release.tag_name || inputs.release-tag }}
+      package-command: |
+        npm ci
+        npm run build:ui
+        dbx-plugin package .
+      package-path: dist/*.dbxp
+      metadata-path: dist/*.artifact.json
+      plugin-cli-version: 0.1.9

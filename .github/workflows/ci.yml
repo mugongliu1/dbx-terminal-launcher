@@ -1,0 +1,48 @@
+name: Check DBX plugin
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Build frontend
+        run: npm run build:ui
+      - name: Verify committed frontend output
+        run: git diff --exit-code -- ui/
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path backend/Cargo.toml --check
+      - name: Verify manifest, package, and backend versions
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
+          const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+          const cargo = fs.readFileSync("backend/Cargo.toml", "utf8");
+          const source = fs.readFileSync("backend/src/main.rs", "utf8");
+          const cargoVersion = cargo.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
+          const backendVersion = source.match(/PLUGIN_VERSION:\s*&str\s*=\s*"([^"]+)"/)?.[1];
+          const backendId = source.match(/PLUGIN_ID:\s*&str\s*=\s*"([^"]+)"/)?.[1];
+          if (!cargoVersion || !backendVersion || !backendId) throw new Error("Backend identity constants are missing");
+          if (new Set([manifest.version, pkg.version, cargoVersion, backendVersion]).size !== 1) {
+            throw new Error("Manifest, package, Cargo, and backend versions must match");
+          }
+          if (manifest.id !== backendId) throw new Error("Manifest and backend plugin IDs must match");
+          NODE
+      - name: Package Linux candidate
+        run: npx --yes @dbx-app/plugin-cli@0.1.9 package . --target linux-x64

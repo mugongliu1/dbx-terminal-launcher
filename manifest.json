@@ -1,0 +1,49 @@
+{
+  "$schema": "https://raw.githubusercontent.com/t8y2/dbx/main/plugins/manifest.schema.json",
+  "manifest_version": 1,
+  "id": "io.github.mugongliu1.terminal",
+  "name": "Embedded Terminal",
+  "version": "0.2.2",
+  "publisher": "mugongliu1",
+  "description": "Run an interactive local shell directly inside a DBX workbench.",
+  "icon": "assets/plugin.svg",
+  "source": "https://github.com/mugongliu1/dbx-terminal-launcher",
+  "homepage": "https://github.com/mugongliu1/dbx-terminal-launcher",
+  "engines": {
+    "dbx": ">=0.5.68",
+    "host_api": "1"
+  },
+  "permissions": ["host.events"],
+  "entrypoints": {
+    "backend": {
+      "protocol_versions": [1],
+      "transport": "stdio-jsonl",
+      "executable": "bin/dbx-plugin-dbx-terminal-launcher"
+    },
+    "ui": {
+      "root": "ui",
+      "entry": "ui/index.html"
+    }
+  },
+  "contributions": [
+    {
+      "type": "workbench",
+      "id": "io.github.mugongliu1.terminal.workbench",
+      "label": "Terminal",
+      "description": "Use an interactive terminal inside DBX.",
+      "icon": "assets/plugin.svg"
+    }
+  ],
+  "localizations": {
+    "zh-CN": {
+      "name": "内嵌终端",
+      "description": "直接在 DBX 工作台内运行本机交互式终端。",
+      "contributions": {
+        "io.github.mugongliu1.terminal.workbench": {
+          "label": "终端",
+          "description": "在 DBX 内使用交互式终端。"
+        }
+      }
+    }
+  }
+}

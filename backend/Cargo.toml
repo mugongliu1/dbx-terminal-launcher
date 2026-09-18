@@ -1,0 +1,22 @@
+[package]
+name = "dbx-plugin-dbx-terminal-launcher"
+version = "0.2.2"
+edition = "2021"
+license = "Apache-2.0"
+
+[workspace]
+
+[dependencies]
+base64 = "0.22"
+dbx-plugin-sdk = { version = "0.1.0" }
+portable-pty = "0.9"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Keep plugin binaries close to the host app's size: default release settings
+# leave ~20MB of symbols and unoptimized generic code in an OpenDAL-sized backend.
+# panic stays "unwind" so the sidecar protocol can report panics as errors.
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1

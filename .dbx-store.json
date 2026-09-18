@@ -1,0 +1,17 @@
+{
+  "name": "Embedded Terminal",
+  "description": "Run an interactive local shell directly inside a DBX workbench.",
+  "icon": "assets/plugin.svg",
+  "tags": ["terminal", "shell", "developer-tools", "local"],
+  "permissions": ["host.events"],
+  "source": "https://github.com/mugongliu1/dbx-terminal-launcher",
+  "homepage": "https://github.com/mugongliu1/dbx-terminal-launcher",
+  "license": "Apache-2.0",
+  "releaseNotes": "Initial official store release with multi-tab local terminals, ANSI rendering, responsive resizing, restart and clear controls, and Chinese and English UI.",
+  "localizations": {
+    "zh-CN": {
+      "name": "内嵌终端",
+      "description": "直接在 DBX 工作台内运行本机交互式终端。"
+    }
+  }
+}

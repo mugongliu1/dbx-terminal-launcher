@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Terminal</title>
+    <link rel="stylesheet" href="./app.css" />
+  </head>
+  <body>
+    <main class="workbench" aria-label="Terminal">
+      <header class="toolbar">
+        <div id="terminal-tabs" class="terminal-tabs" role="tablist" aria-label="Terminals"></div>
+        <div class="actions" role="toolbar" aria-label="Terminal controls">
+          <button id="new-button" class="icon-button" type="button">
+            <i data-lucide="plus" aria-hidden="true"></i>
+          </button>
+          <button id="clear-button" class="icon-button" type="button">
+            <i data-lucide="eraser" aria-hidden="true"></i>
+          </button>
+          <button id="restart-button" class="icon-button" type="button">
+            <i data-lucide="rotate-ccw" aria-hidden="true"></i>
+          </button>
+          <button id="close-button" class="icon-button danger" type="button">
+            <i data-lucide="square" aria-hidden="true"></i>
+          </button>
+        </div>
+      </header>
+      <section id="terminal-shell" class="terminal-shell">
+        <div id="terminal-panels" class="terminal-panels"></div>
+      </section>
+    </main>
+    <script src="./app.js"></script>
+  </body>
+</html>
