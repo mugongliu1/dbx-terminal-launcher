@@ -15,7 +15,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 const PLUGIN_ID: &str = "io.github.mugongliu1.terminal";
-const PLUGIN_VERSION: &str = "0.2.2";
+const PLUGIN_VERSION: &str = "0.2.3";
 const MIN_TERMINAL_SIZE: u16 = 2;
 const MAX_TERMINAL_SIZE: u16 = 500;
 const MAX_INPUT_BYTES: usize = 64 * 1024;

@@ -325,6 +325,10 @@ button {
   scrollbar-width: thin;
 }
 
+.terminal .xterm-scrollable-element {
+  overscroll-behavior: contain;
+}
+
 .overlay {
   position: absolute;
   inset: 0;

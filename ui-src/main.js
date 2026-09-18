@@ -4,6 +4,8 @@ import { createIcons, Eraser, Plus, RotateCcw, Square, X } from "lucide";
 import "@xterm/xterm/css/xterm.css";
 import "./styles.css";
 
+const TERMINAL_SCROLLBACK_LINES = 100000;
+
 const copy = {
   "zh-CN": {
     controls: "终端控制",
@@ -194,9 +196,11 @@ function buildTerminalInstance(number) {
     fontFamily: '"Cascadia Mono", "SFMono-Regular", Consolas, "Microsoft YaHei", "Microsoft YaHei UI", "Liberation Mono", monospace',
     fontSize: 13,
     lineHeight: 1.22,
-    scrollback: 5000,
+    scrollback: TERMINAL_SCROLLBACK_LINES,
+    scrollOnEraseInDisplay: true,
     tabStopWidth: 4,
     theme: terminalTheme(),
+    ...(isWindowsHost() ? { windowsPty: { backend: "conpty" } } : {}),
   });
   terminal.loadAddon(fitAddon);
 
@@ -688,6 +692,10 @@ function terminalTheme() {
 
 function isLightTheme() {
   return document.documentElement.dataset.dbxTheme !== "dark";
+}
+
+function isWindowsHost() {
+  return navigator.userAgent.includes("Windows");
 }
 
 function terminalColorRgb(variable) {
