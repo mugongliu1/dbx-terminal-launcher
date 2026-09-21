@@ -161,6 +161,15 @@ function createTerminalInstance(startImmediately, splitDirection = null) {
     instance.terminal.parser.registerOscHandler(10, (data) => handleTerminalColorQuery(instance, 10, data)),
     instance.terminal.parser.registerOscHandler(11, (data) => handleTerminalColorQuery(instance, 11, data)),
   ];
+  // Codex wraps animated redraws in DEC synchronized output (CSI ?2026h/l).
+  // Repaint the full viewport after the frame closes so canvas pixels from a
+  // previous prompt animation cannot survive in otherwise blank cells.
+  instance.disposables.push(
+    instance.terminal.parser.registerCsiHandler({ prefix: "?", final: "l" }, (params) => {
+      if (params.length === 1 && params[0] === 2026) scheduleTerminalRefresh(instance);
+      return false;
+    }),
+  );
   instance.disposables.push(instance.terminal.onData((data) => bufferInput(instance, data)));
 
   createIcons({ icons: { X } });
@@ -332,6 +341,7 @@ function buildTerminalInstance(number) {
     inputQueue: Promise.resolve(),
     outputRemainder: "",
     outputDecoder: new TextDecoder(),
+    refreshScheduled: false,
   };
 
   tabButton.addEventListener("click", () => activateTerminal(instance));
@@ -559,7 +569,20 @@ function writeTerminalOutput(instance, data) {
   const chunk = typeof data === "string" ? data : instance.outputDecoder.decode(data, { stream: true });
   const normalized = normalizeOutputChunk(`${instance.outputRemainder}${chunk}`, isLightTheme());
   instance.outputRemainder = normalized.remainder;
-  if (normalized.text) instance.terminal.write(normalized.text);
+  if (normalized.text) {
+    instance.terminal.write(normalized.text);
+    scheduleTerminalRefresh(instance);
+  }
+}
+
+function scheduleTerminalRefresh(instance) {
+  if (instance.refreshScheduled || instance.terminal.rows <= 0) return;
+  instance.refreshScheduled = true;
+  requestAnimationFrame(() => {
+    instance.refreshScheduled = false;
+    if (!instances.has(instance.id) || instance.terminal.rows <= 0) return;
+    instance.terminal.refresh(0, instance.terminal.rows - 1);
+  });
 }
 
 function normalizeOutputChunk(data, normalizeBlackBackground) {
