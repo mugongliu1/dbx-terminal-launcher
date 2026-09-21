@@ -1,10 +1,11 @@
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { createIcons, Eraser, Plus, RotateCcw, Square, X } from "lucide";
+import { createIcons, Eraser, Plus, RotateCcw, Square, X, Columns2, Rows2, Maximize2 } from "lucide";
 import "@xterm/xterm/css/xterm.css";
 import "./styles.css";
 
 const TERMINAL_SCROLLBACK_LINES = 100000;
+const MAX_VISIBLE_TERMINALS = 4;
 
 const copy = {
   "zh-CN": {
@@ -12,6 +13,10 @@ const copy = {
     terminalLabel: (number) => `终端 ${number}`,
     clear: "清屏",
     newTerminal: "新建终端",
+    splitRight: "左右分屏并新建终端",
+    splitDown: "上下分屏并新建终端",
+    singlePane: "返回单屏",
+    splitLimit: "最多同时显示 4 个终端",
     restart: "重新启动",
     stop: "停止终端",
     closeTab: "关闭终端标签",
@@ -30,6 +35,10 @@ const copy = {
     terminalLabel: (number) => `Terminal ${number}`,
     clear: "Clear",
     newTerminal: "New terminal",
+    splitRight: "Split left/right with a new terminal",
+    splitDown: "Split top/bottom with a new terminal",
+    singlePane: "Return to single pane",
+    splitLimit: "At most 4 terminals can be visible",
     restart: "Restart",
     stop: "Stop terminal",
     closeTab: "Close terminal tab",
@@ -50,6 +59,9 @@ const elements = {
   panels: document.querySelector("#terminal-panels"),
   tabs: document.querySelector("#terminal-tabs"),
   newButton: document.querySelector("#new-button"),
+  splitRightButton: document.querySelector("#split-right-button"),
+  splitDownButton: document.querySelector("#split-down-button"),
+  singleButton: document.querySelector("#single-button"),
   clearButton: document.querySelector("#clear-button"),
   restartButton: document.querySelector("#restart-button"),
   closeButton: document.querySelector("#close-button"),
@@ -63,11 +75,21 @@ let strings = copy["zh-CN"];
 let activeInstanceId = null;
 let instanceSequence = 0;
 let removeEventListener;
+let removeContextListener;
+let workbenchContext = {};
+let paneLayout = null;
 
-createIcons({ icons: { Eraser, Plus, RotateCcw, Square, X } });
+createIcons({ icons: { Eraser, Plus, RotateCcw, Square, X, Columns2, Rows2, Maximize2 } });
 localize();
 
 elements.newButton.addEventListener("click", () => createTerminalInstance(true));
+elements.splitRightButton.addEventListener("click", () => splitTerminal("columns"));
+elements.splitDownButton.addEventListener("click", () => splitTerminal("rows"));
+elements.singleButton.addEventListener("click", () => {
+  paneLayout = activeInstanceId;
+  renderPaneLayout();
+  activeInstance()?.terminal.focus();
+});
 elements.clearButton.addEventListener("click", () => {
   const instance = activeInstance();
   instance?.terminal.clear();
@@ -83,10 +105,7 @@ elements.closeButton.addEventListener("click", () => {
 });
 
 const resizeObserver = new ResizeObserver(() => {
-  const instance = activeInstance();
-  if (!instance) return;
-  fitTerminal(instance);
-  scheduleBackendResize(instance);
+  fitVisibleTerminals();
 });
 resizeObserver.observe(elements.shell);
 
@@ -109,7 +128,10 @@ async function initialize(instance) {
 
   removeEventListener = sdk.onEvent(handleHostEvent);
   try {
-    await sdk.ready;
+    workbenchContext = (await sdk.ready) || {};
+    removeContextListener = sdk.onContext?.((context) => {
+      workbenchContext = { ...workbenchContext, ...(context || {}) };
+    });
     selectLocale();
     applyTheme();
     await startTerminal(instance);
@@ -118,14 +140,23 @@ async function initialize(instance) {
   }
 }
 
-function createTerminalInstance(startImmediately) {
+function createTerminalInstance(startImmediately, splitDirection = null) {
+  if (splitDirection && paneIds().length >= MAX_VISIBLE_TERMINALS) return null;
   const instance = buildTerminalInstance(++instanceSequence);
   instances.set(instance.id, instance);
   elements.tabs.append(instance.tabItem);
   elements.panels.append(instance.panel);
+  if (splitDirection && activeInstanceId) {
+    paneLayout = replacePane(paneLayout, activeInstanceId, {
+      direction: splitDirection, first: activeInstanceId, second: instance.id,
+    });
+  }
   activateTerminal(instance);
 
   instance.terminal.open(instance.terminalHost);
+  resizeObserver.observe(instance.terminalHost);
+  installHistoryScrolling(instance);
+  installHistoryProtection(instance);
   instance.colorQueryHandlers = [
     instance.terminal.parser.registerOscHandler(10, (data) => handleTerminalColorQuery(instance, 10, data)),
     instance.terminal.parser.registerOscHandler(11, (data) => handleTerminalColorQuery(instance, 11, data)),
@@ -140,6 +171,59 @@ function createTerminalInstance(startImmediately) {
     if (startImmediately) startTerminal(instance);
   });
   return instance;
+}
+
+function installHistoryProtection(instance) {
+  const { terminal } = instance;
+  // scrollOnEraseInDisplay preserves ED2, but xterm still deletes the entire
+  // scrollback on ED3. Keep normal-buffer history until the user explicitly
+  // clears/restarts the terminal. Parser hooks also handle split PTY chunks.
+  const preserveScrollback = (params) =>
+    terminal.buffer.active.type === "normal" && params[0] === 3;
+  instance.disposables.push(
+    terminal.parser.registerCsiHandler({ final: "J" }, preserveScrollback),
+    terminal.parser.registerCsiHandler({ prefix: "?", final: "J" }, preserveScrollback),
+  );
+}
+
+function installHistoryScrolling(instance) {
+  const { terminal, terminalHost } = instance;
+  let pendingPixels = 0;
+  const onWheel = (event) => {
+    const buffer = terminal.buffer.active;
+    // Full-screen applications own the alternate buffer. In the normal buffer,
+    // history navigation must win over application mouse reporting (which can
+    // otherwise send input and jump the viewport back to the prompt).
+    if (buffer.type !== "normal" || buffer.baseY === 0 || event.ctrlKey || event.deltaY === 0) {
+      pendingPixels = 0;
+      return;
+    }
+
+    const screen = terminal.element?.querySelector(".xterm-screen");
+    const rowHeight = screen?.getBoundingClientRect().height / terminal.rows;
+    if (!Number.isFinite(rowHeight) || rowHeight <= 0) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? rowHeight
+      : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? rowHeight * terminal.rows : 1;
+    const pixels = event.deltaY * unit * terminal.options.scrollSensitivity;
+    if (Math.sign(pendingPixels) !== Math.sign(pixels)) pendingPixels = 0;
+    pendingPixels += pixels;
+    const lines = Math.trunc(pendingPixels / rowHeight);
+    if (lines) {
+      pendingPixels -= lines * rowHeight;
+      terminal.scrollLines(lines);
+    }
+    if ((pixels < 0 && buffer.viewportY === 0)
+      || (pixels > 0 && buffer.viewportY === buffer.baseY)) pendingPixels = 0;
+  };
+
+  // Capture before xterm's wheel listeners, including over the host padding.
+  terminalHost.addEventListener("wheel", onWheel, { capture: true, passive: false });
+  instance.disposables.push({
+    dispose: () => terminalHost.removeEventListener("wheel", onWheel, true),
+  });
 }
 
 function buildTerminalInstance(number) {
@@ -170,6 +254,15 @@ function buildTerminalInstance(number) {
   const panel = document.createElement("div");
   panel.className = "terminal-panel";
   panel.hidden = true;
+  panel.dataset.instanceId = id;
+  const paneHeader = document.createElement("div");
+  paneHeader.className = "pane-header";
+  const paneLabel = document.createElement("span");
+  const paneCloseButton = document.createElement("button");
+  paneCloseButton.className = "terminal-tab-close";
+  paneCloseButton.type = "button";
+  paneCloseButton.innerHTML = '<i data-lucide="x" aria-hidden="true"></i>';
+  paneHeader.append(paneLabel, paneCloseButton);
   const terminalHost = document.createElement("div");
   terminalHost.className = "terminal";
   terminalHost.setAttribute("aria-label", "Interactive terminal");
@@ -186,7 +279,7 @@ function buildTerminalInstance(number) {
   overlayAction.type = "button";
   overlayAction.hidden = true;
   overlay.append(spinner, overlayMessage, overlayAction);
-  panel.append(terminalHost, overlay);
+  panel.append(paneHeader, terminalHost, overlay);
 
   const fitAddon = new FitAddon();
   const terminal = new Terminal({
@@ -212,6 +305,8 @@ function buildTerminalInstance(number) {
     tabLabel,
     closeTabButton,
     panel,
+    paneLabel,
+    paneCloseButton,
     terminalHost,
     overlay,
     overlayMessage,
@@ -236,24 +331,76 @@ function buildTerminalInstance(number) {
 
   tabButton.addEventListener("click", () => activateTerminal(instance));
   closeTabButton.addEventListener("click", () => closeTerminalTab(instance));
+  paneCloseButton.addEventListener("click", () => closeTerminalTab(instance));
+  panel.addEventListener("pointerdown", () => activateTerminal(instance, false));
+  panel.addEventListener("focusin", () => {
+    if (activeInstanceId !== instance.id) activateTerminal(instance, false);
+  });
   overlayAction.addEventListener("click", () => restartTerminal(instance));
   return instance;
 }
 
-function activateTerminal(instance) {
-  if (!instances.has(instance.id) && instances.size) return;
-  activeInstanceId = instance.id;
-  for (const candidate of instances.values()) {
-    const active = candidate.id === instance.id;
-    candidate.panel.hidden = !active;
-    candidate.tabItem.dataset.active = String(active);
-    candidate.tabButton.setAttribute("aria-selected", String(active));
-  }
-  updateToolbar();
-  requestAnimationFrame(() => {
+function paneIds(node = paneLayout) {
+  if (!node) return [];
+  return typeof node === "string" ? [node] : [...paneIds(node.first), ...paneIds(node.second)];
+}
+
+function replacePane(node, id, replacement) {
+  if (!node || typeof node === "string") return node === id ? replacement : node;
+  const first = replacePane(node.first, id, replacement);
+  const second = replacePane(node.second, id, replacement);
+  return first && second ? { ...node, first, second } : first || second;
+}
+
+function splitTerminal(direction) {
+  if (paneIds().length < MAX_VISIBLE_TERMINALS) createTerminalInstance(true, direction);
+}
+
+function fitVisibleTerminals() {
+  for (const id of paneIds()) {
+    const instance = instances.get(id);
+    if (!instance) continue;
     fitTerminal(instance);
     scheduleBackendResize(instance);
-    instance.terminal.focus();
+  }
+}
+
+function renderPaneLayout() {
+  const visible = paneIds();
+  elements.panels.dataset.split = String(visible.length > 1);
+  for (const instance of instances.values()) {
+    instance.panel.hidden = !visible.includes(instance.id);
+    instance.panel.dataset.active = String(instance.id === activeInstanceId);
+    instance.tabItem.dataset.active = String(instance.id === activeInstanceId);
+    instance.tabButton.setAttribute("aria-selected", String(instance.id === activeInstanceId));
+  }
+  const place = (node, x, y, width, height) => {
+    if (!node) return;
+    if (typeof node === "string") {
+      const panel = instances.get(node)?.panel;
+      if (panel) Object.assign(panel.style, { left: `${x}%`, top: `${y}%`, width: `${width}%`, height: `${height}%` });
+    } else if (node.direction === "columns") {
+      place(node.first, x, y, width / 2, height);
+      place(node.second, x + width / 2, y, width / 2, height);
+    } else {
+      place(node.first, x, y, width, height / 2);
+      place(node.second, x, y + height / 2, width, height / 2);
+    }
+  };
+  place(paneLayout, 0, 0, 100, 100);
+  updateToolbar();
+  requestAnimationFrame(fitVisibleTerminals);
+}
+
+function activateTerminal(instance, focus = true) {
+  if (!instances.has(instance.id) && instances.size) return;
+  if (!paneIds().includes(instance.id)) {
+    paneLayout = paneLayout ? replacePane(paneLayout, activeInstanceId, instance.id) : instance.id;
+  }
+  activeInstanceId = instance.id;
+  renderPaneLayout();
+  requestAnimationFrame(() => {
+    if (focus && activeInstanceId === instance.id && instances.has(instance.id)) instance.terminal.focus();
   });
 }
 
@@ -271,12 +418,14 @@ async function startTerminal(instance) {
   fitTerminal(instance);
 
   try {
+    const cwd = terminalWorkingDirectory();
     await sdk.invoke(
       "terminal/start",
       {
         sessionId,
         cols: clampDimension(instance.terminal.cols),
         rows: clampDimension(instance.terminal.rows),
+        ...(cwd ? { cwd } : {}),
       },
       { timeoutMs: 30000 },
     );
@@ -292,6 +441,12 @@ async function startTerminal(instance) {
     if (instance.sessionId === sessionId) instance.sessionId = null;
     if (token === instance.operation && instances.has(instance.id)) showError(instance, error);
   }
+}
+
+function terminalWorkingDirectory() {
+  const context = workbenchContext || {};
+  const value = context.cwd || context.workingDirectory || context.initialDirectory;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 async function restartTerminal(instance) {
@@ -337,11 +492,13 @@ function closeTerminalTab(instance) {
   const ordered = [...instances.values()];
   const index = ordered.indexOf(instance);
   destroyTerminalInstance(instance);
-  const next = ordered[index + 1] || ordered[index - 1];
+  const next = instances.get(activeInstanceId) || instances.get(paneIds()[0]) || ordered[index + 1] || ordered[index - 1];
   if (next) activateTerminal(next);
 }
 
 function destroyTerminalInstance(instance) {
+  paneLayout = replacePane(paneLayout, instance.id, null);
+  resizeObserver.unobserve(instance.terminalHost);
   clearPendingInput(instance);
   clearTimeout(instance.resizeTimer);
   ++instance.operation;
@@ -551,7 +708,7 @@ function clearPendingInput(instance) {
 }
 
 function fitTerminal(instance) {
-  if (activeInstanceId !== instance.id || elements.shell.clientWidth < 20 || elements.shell.clientHeight < 20) return;
+  if (instance.panel.hidden || instance.terminalHost.clientWidth < 20 || instance.terminalHost.clientHeight < 20) return;
   try {
     instance.fitAddon.fit();
   } catch {
@@ -603,6 +760,12 @@ function activeInstance() {
 
 function updateToolbar() {
   const instance = activeInstance();
+  const atLimit = paneIds().length >= MAX_VISIBLE_TERMINALS;
+  elements.splitRightButton.disabled = atLimit || !instance;
+  elements.splitDownButton.disabled = atLimit || !instance;
+  elements.singleButton.disabled = paneIds().length <= 1;
+  setButtonLabel(elements.splitRightButton, atLimit ? strings.splitLimit : strings.splitRight);
+  setButtonLabel(elements.splitDownButton, atLimit ? strings.splitLimit : strings.splitDown);
   elements.clearButton.disabled = !instance;
   elements.restartButton.disabled = !instance || instance.state === "starting";
   elements.closeButton.disabled = !instance?.sessionId || !["starting", "active"].includes(instance.state);
@@ -610,7 +773,10 @@ function updateToolbar() {
 
 function updateTabCloseButtons() {
   const disabled = instances.size <= 1;
-  for (const instance of instances.values()) instance.closeTabButton.disabled = disabled;
+  for (const instance of instances.values()) {
+    instance.closeTabButton.disabled = disabled;
+    instance.paneCloseButton.disabled = disabled;
+  }
 }
 
 function selectLocale() {
@@ -632,6 +798,9 @@ function selectLocale() {
 function localize() {
   elements.toolbar.setAttribute("aria-label", strings.controls);
   setButtonLabel(elements.newButton, strings.newTerminal);
+  setButtonLabel(elements.splitRightButton, strings.splitRight);
+  setButtonLabel(elements.splitDownButton, strings.splitDown);
+  setButtonLabel(elements.singleButton, strings.singlePane);
   setButtonLabel(elements.clearButton, strings.clear);
   setButtonLabel(elements.restartButton, strings.restart);
   setButtonLabel(elements.closeButton, strings.stop);
@@ -641,6 +810,9 @@ function updateInstanceLabel(instance) {
   const label = strings.terminalLabel(instance.number);
   const stateLabel = strings[instance.state] || strings.error;
   instance.tabLabel.textContent = label;
+  instance.paneLabel.textContent = `${label} · ${stateLabel}`;
+  instance.panel.setAttribute("aria-label", label);
+  setButtonLabel(instance.paneCloseButton, `${strings.closeTab}: ${label}`);
   instance.tabButton.title = `${label} · ${stateLabel}`;
   instance.tabButton.setAttribute("aria-label", `${label}, ${stateLabel}`);
   instance.closeTabButton.title = `${strings.closeTab}: ${label}`;
@@ -733,6 +905,7 @@ function closeAllSessions() {
 
 function dispose() {
   removeEventListener?.();
+  removeContextListener?.();
   resizeObserver.disconnect();
   for (const instance of [...instances.values()]) destroyTerminalInstance(instance);
 }

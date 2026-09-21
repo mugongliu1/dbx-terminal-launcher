@@ -276,12 +276,15 @@ button {
 }
 
 .terminal-panels {
+  position: relative;
   width: 100%;
   height: 100%;
 }
 
 .terminal-panel {
-  position: relative;
+  position: absolute;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   height: 100%;
   min-width: 0;
@@ -291,9 +294,66 @@ button {
 }
 
 .terminal {
+  flex: 1 1 0;
+  min-height: 0;
   width: 100%;
   height: 100%;
   padding: 10px 9px 8px 12px;
+}
+
+.pane-header {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 28px;
+  min-width: 0;
+  padding-left: 10px;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: 11px;
+  border-bottom: 1px solid var(--border);
+}
+
+.pane-header span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-panels[data-split="true"] .terminal-panel {
+  border: 1px solid var(--border);
+}
+
+.terminal-panels[data-split="true"] .pane-header {
+  display: flex;
+}
+
+.terminal-panels[data-split="true"] .terminal-panel[data-active="true"] {
+  border-color: var(--accent);
+}
+
+.terminal-panel[data-active="true"] .pane-header {
+  color: var(--accent);
+}
+
+.terminal-panels[data-split="true"] .overlay {
+  top: 28px;
+}
+
+@media (max-width: 540px) {
+  .workbench {
+    grid-template-rows: 74px minmax(0, 1fr);
+  }
+  .toolbar {
+    flex-wrap: wrap;
+  }
+  .terminal-tabs {
+    flex-basis: 100%;
+    height: 34px;
+  }
+  .actions {
+    margin-left: auto;
+  }
 }
 
 .terminal .xterm {

@@ -37,6 +37,8 @@ struct StartParams {
     session_id: String,
     cols: u16,
     rows: u16,
+    #[serde(default)]
+    cwd: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -99,7 +101,13 @@ impl Plugin {
         command.args(shell.args.iter());
         command.env("TERM", "xterm-256color");
         command.env("COLORTERM", "truecolor");
-        if let Some(home) = home_directory() {
+        if let Some(cwd) = params
+            .cwd
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+        {
+            command.cwd(PathBuf::from(cwd));
+        } else if let Some(home) = home_directory() {
             command.cwd(home);
         }
 
