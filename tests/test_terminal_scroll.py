@@ -37,6 +37,7 @@ def run():
         page.add_init_script(SDK)
         page.goto("http://terminal.test/index.html")
         page.wait_for_function("document.querySelector('.terminal-tab-item').dataset.state === 'active'")
+        assert not page.locator('.xterm.xterm-cursor-blink').count(), "Cursor animation must stay disabled for Codex redraws"
         page.evaluate("output(Array.from({length: 200}, (_, i) => `history ${i}\\r\\n`).join(''))")
         page.wait_for_function("document.querySelector('.xterm-rows').textContent.includes('history 199')")
         rows = page.locator(".xterm-rows")

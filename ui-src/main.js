@@ -284,8 +284,13 @@ function buildTerminalInstance(number) {
   const fitAddon = new FitAddon();
   const terminal = new Terminal({
     allowTransparency: false,
-    cursorBlink: true,
-    cursorStyle: "bar",
+    // Codex redraws its prompt rapidly and toggles the cursor on every
+    // synchronized update. A blinking bar cursor can leave one-cell paint
+    // remnants in the canvas while those updates are in flight, which appear
+    // as scattered dots around the input line. Let the application control
+    // visibility and keep xterm's own cursor animation disabled.
+    cursorBlink: false,
+    cursorStyle: "block",
     fontFamily: '"Cascadia Mono", "SFMono-Regular", Consolas, "Microsoft YaHei", "Microsoft YaHei UI", "Liberation Mono", monospace',
     fontSize: 13,
     lineHeight: 1.22,
