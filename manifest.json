@@ -3,7 +3,7 @@
   "manifest_version": 1,
   "id": "io.github.mugongliu1.terminal",
   "name": "Embedded Terminal",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "publisher": "mugongliu1",
   "description": "Run an interactive local shell directly inside a DBX workbench.",
   "icon": "assets/plugin.svg",

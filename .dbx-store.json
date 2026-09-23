@@ -7,7 +7,7 @@
   "source": "https://github.com/mugongliu1/dbx-terminal-launcher",
   "homepage": "https://github.com/mugongliu1/dbx-terminal-launcher",
   "license": "Apache-2.0",
-  "releaseNotes": "Initial official store release with multi-tab local terminals, ANSI rendering, responsive resizing, restart and clear controls, and Chinese and English UI.",
+  "releaseNotes": "Fixes synchronized Codex frame repainting and cursor redraw artifacts in the embedded terminal.",
   "localizations": {
     "zh-CN": {
       "name": "内嵌终端",
