@@ -33,12 +33,41 @@
           <button id="close-button" class="icon-button danger" type="button">
             <i data-lucide="square" aria-hidden="true"></i>
           </button>
+          <button id="theme-button" class="icon-button" type="button" aria-haspopup="dialog" aria-controls="theme-dialog">
+            <i data-lucide="palette" aria-hidden="true"></i>
+          </button>
         </div>
       </header>
       <section id="terminal-shell" class="terminal-shell">
         <div id="terminal-panels" class="terminal-panels"></div>
       </section>
     </main>
+    <dialog id="theme-dialog" class="theme-dialog" aria-labelledby="theme-title">
+      <form id="theme-form" method="dialog">
+        <header class="theme-header">
+          <h2 id="theme-title"></h2>
+          <button id="theme-close-button" class="icon-button" type="button"><i data-lucide="x" aria-hidden="true"></i></button>
+        </header>
+        <div class="theme-body">
+          <label class="theme-field" for="theme-scheme"><span id="theme-scheme-label"></span><select id="theme-scheme" name="scheme"></select></label>
+          <div id="theme-colors" class="theme-colors">
+            <label class="theme-field" for="theme-background"><span id="theme-background-label"></span><input id="theme-background" type="color" name="background" /></label>
+            <label class="theme-field" for="theme-foreground"><span id="theme-foreground-label"></span><input id="theme-foreground" type="color" name="foreground" /></label>
+            <label class="theme-field" for="theme-command"><span id="theme-command-label"></span><input id="theme-command" type="color" name="command" /></label>
+            <label class="theme-field" for="theme-string"><span id="theme-string-label"></span><input id="theme-string" type="color" name="string" /></label>
+            <label class="theme-field" for="theme-number"><span id="theme-number-label"></span><input id="theme-number" type="color" name="number" /></label>
+            <label class="theme-field" for="theme-symbol"><span id="theme-symbol-label"></span><input id="theme-symbol" type="color" name="symbol" /></label>
+          </div>
+          <p id="theme-status" class="theme-status" role="status"></p>
+        </div>
+        <footer class="theme-footer">
+          <button id="theme-reset-button" class="command-button" type="button"></button>
+          <span class="theme-footer-spacer"></span>
+          <button id="theme-cancel-button" class="command-button" type="button"></button>
+          <button id="theme-save-button" class="command-button primary" type="button"></button>
+        </footer>
+      </form>
+    </dialog>
     <script src="./app.js"></script>
   </body>
 </html>

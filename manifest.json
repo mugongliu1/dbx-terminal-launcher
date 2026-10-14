@@ -3,7 +3,7 @@
   "manifest_version": 1,
   "id": "io.github.mugongliu1.terminal",
   "name": "Embedded Terminal",
-  "version": "0.2.4",
+  "version": "0.2.6",
   "publisher": "mugongliu1",
   "description": "Run an interactive local shell directly inside a DBX workbench.",
   "icon": "assets/plugin.svg",
@@ -13,7 +13,7 @@
     "dbx": ">=0.5.68",
     "host_api": "1"
   },
-  "permissions": ["host.events"],
+  "permissions": ["host.events", "host.storage"],
   "entrypoints": {
     "backend": {
       "protocol_versions": [1],
@@ -32,6 +32,33 @@
       "label": "Terminal",
       "description": "Use an interactive terminal inside DBX.",
       "icon": "assets/plugin.svg"
+    },
+    {
+      "type": "command",
+      "id": "open-terminal",
+      "label": "Open Terminal",
+      "description": "Open the embedded terminal in a DBX workbench tab.",
+      "icon": "assets/plugin.svg",
+      "action": {
+        "type": "open-workbench",
+        "workbench": "io.github.mugongliu1.terminal.workbench",
+        "presentation": "tab",
+        "reuse": "singleton",
+        "restore": "none"
+      }
+    },
+    {
+      "type": "menus",
+      "id": "io.github.mugongliu1.terminal.menus",
+      "items": [
+        {
+          "location": "appSidebar",
+          "command": "open-terminal",
+          "group": "primary",
+          "order": 100,
+          "default_visible": true
+        }
+      ]
     }
   ],
   "localizations": {
@@ -42,6 +69,10 @@
         "io.github.mugongliu1.terminal.workbench": {
           "label": "终端",
           "description": "在 DBX 内使用交互式终端。"
+        },
+        "open-terminal": {
+          "label": "打开终端",
+          "description": "在 DBX 工作台标签页中打开内嵌终端。"
         }
       }
     }

@@ -1,11 +1,22 @@
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { createIcons, Eraser, Plus, RotateCcw, Square, X, Columns2, Rows2, Maximize2 } from "lucide";
+import { createIcons, Eraser, Plus, RotateCcw, Square, X, Columns2, Rows2, Maximize2, Palette } from "lucide";
 import "@xterm/xterm/css/xterm.css";
 import "./styles.css";
 
 const TERMINAL_SCROLLBACK_LINES = 100000;
 const MAX_VISIBLE_TERMINALS = 4;
+const THEME_STORAGE_KEY = "terminal-theme-v1";
+const THEME_FIELDS = ["background", "foreground", "command", "string", "number", "symbol"];
+const THEME_SCHEMES = ["host", "light", "dark", "custom"];
+const PALETTES = {
+  light: { background: "#ffffff", foreground: "#202327", command: "#825900", string: "#116d78", number: "#234b79", symbol: "#59636d" },
+  dark: { background: "#111315", foreground: "#e7e9ec", command: "#e2ad45", string: "#56bdc9", number: "#f4f6f8", symbol: "#9da4ab" },
+};
+const themeCopy = {
+  "zh-CN": { title: "终端配色", scheme: "配色方案", host: "跟随 DBX", light: "浅色", dark: "深色", custom: "自定义", background: "背景", foreground: "文字", command: "命令", string: "字符串", number: "数字", symbol: "符号与参数", reset: "恢复默认", cancel: "取消", save: "保存", saveError: "无法保存配色设置" },
+  en: { title: "Terminal colors", scheme: "Color scheme", host: "Follow DBX", light: "Light", dark: "Dark", custom: "Custom", background: "Background", foreground: "Text", command: "Commands", string: "Strings", number: "Numbers", symbol: "Symbols & parameters", reset: "Reset", cancel: "Cancel", save: "Save", saveError: "Could not save color settings" },
+};
 
 const copy = {
   "zh-CN": {
@@ -65,6 +76,16 @@ const elements = {
   clearButton: document.querySelector("#clear-button"),
   restartButton: document.querySelector("#restart-button"),
   closeButton: document.querySelector("#close-button"),
+  themeButton: document.querySelector("#theme-button"),
+  themeDialog: document.querySelector("#theme-dialog"),
+  themeForm: document.querySelector("#theme-form"),
+  themeScheme: document.querySelector("#theme-scheme"),
+  themeColors: document.querySelector("#theme-colors"),
+  themeStatus: document.querySelector("#theme-status"),
+  themeCloseButton: document.querySelector("#theme-close-button"),
+  themeCancelButton: document.querySelector("#theme-cancel-button"),
+  themeResetButton: document.querySelector("#theme-reset-button"),
+  themeSaveButton: document.querySelector("#theme-save-button"),
   toolbar: document.querySelector('[role="toolbar"]'),
 };
 
@@ -78,9 +99,12 @@ let removeEventListener;
 let removeContextListener;
 let workbenchContext = {};
 let paneLayout = null;
+let themeSettings = { scheme: "host", colors: { ...PALETTES.light } };
+let themeDraft = null;
 
-createIcons({ icons: { Eraser, Plus, RotateCcw, Square, X, Columns2, Rows2, Maximize2 } });
+createIcons({ icons: { Eraser, Plus, RotateCcw, Square, X, Columns2, Rows2, Maximize2, Palette } });
 localize();
+applyTheme();
 
 elements.newButton.addEventListener("click", () => createTerminalInstance(true));
 elements.splitRightButton.addEventListener("click", () => splitTerminal("columns"));
@@ -102,6 +126,41 @@ elements.restartButton.addEventListener("click", () => {
 elements.closeButton.addEventListener("click", () => {
   const instance = activeInstance();
   if (instance) stopTerminal(instance);
+});
+elements.themeButton.addEventListener("click", openThemeDialog);
+elements.themeCloseButton.addEventListener("click", () => elements.themeDialog.close());
+elements.themeCancelButton.addEventListener("click", () => elements.themeDialog.close());
+elements.themeResetButton.addEventListener("click", () => {
+  themeDraft = { scheme: "host", colors: { ...PALETTES[hostTheme()] } };
+  renderThemeDraft();
+});
+elements.themeScheme.addEventListener("change", () => {
+  if (elements.themeScheme.value === "custom" && themeDraft.scheme !== "custom") {
+    themeDraft.colors = { ...paletteFor(themeDraft) };
+  }
+  themeDraft.scheme = elements.themeScheme.value;
+  renderThemeDraft();
+});
+for (const field of THEME_FIELDS) {
+  document.querySelector(`#theme-${field}`).addEventListener("input", (event) => {
+    themeDraft.colors[field] = event.target.value;
+  });
+}
+elements.themeForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  void saveThemeSettings();
+});
+// Keep an explicit click handler as well as the form fallback. Some embedded
+// WebViews handle <dialog method="dialog"> submits before dispatching the
+// submit event, which made the Save button appear to do nothing.
+elements.themeSaveButton.addEventListener("click", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  void saveThemeSettings();
+});
+elements.themeDialog.addEventListener("click", (event) => {
+  if (event.target === elements.themeDialog) elements.themeDialog.close();
 });
 
 const resizeObserver = new ResizeObserver(() => {
@@ -129,6 +188,7 @@ async function initialize(instance) {
   removeEventListener = sdk.onEvent(handleHostEvent);
   try {
     workbenchContext = (await sdk.ready) || {};
+    await loadThemeSettings();
     removeContextListener = sdk.onContext?.((context) => {
       workbenchContext = { ...workbenchContext, ...(context || {}) };
     });
@@ -832,6 +892,89 @@ function localize() {
   setButtonLabel(elements.clearButton, strings.clear);
   setButtonLabel(elements.restartButton, strings.restart);
   setButtonLabel(elements.closeButton, strings.stop);
+  localizeThemeDialog();
+}
+
+function localizeThemeDialog() {
+  const labels = themeCopy[strings === copy.en ? "en" : "zh-CN"];
+  setButtonLabel(elements.themeButton, labels.title);
+  setButtonLabel(elements.themeCloseButton, labels.cancel);
+  document.querySelector("#theme-title").textContent = labels.title;
+  document.querySelector("#theme-scheme-label").textContent = labels.scheme;
+  elements.themeScheme.replaceChildren(...THEME_SCHEMES.map((scheme) => {
+    const option = document.createElement("option");
+    option.value = scheme;
+    option.textContent = labels[scheme];
+    return option;
+  }));
+  for (const field of THEME_FIELDS) document.querySelector(`#theme-${field}-label`).textContent = labels[field];
+  elements.themeResetButton.textContent = labels.reset;
+  elements.themeCancelButton.textContent = labels.cancel;
+  elements.themeSaveButton.textContent = labels.save;
+  if (themeDraft) renderThemeDraft();
+}
+
+function openThemeDialog() {
+  themeDraft = { scheme: themeSettings.scheme, colors: { ...themeSettings.colors } };
+  elements.themeStatus.textContent = "";
+  renderThemeDraft();
+  elements.themeDialog.showModal();
+}
+
+function renderThemeDraft() {
+  elements.themeScheme.value = themeDraft.scheme;
+  elements.themeColors.hidden = themeDraft.scheme !== "custom";
+  for (const field of THEME_FIELDS) document.querySelector(`#theme-${field}`).value = themeDraft.colors[field];
+}
+
+async function loadThemeSettings() {
+  if (!sdk?.capabilities?.storage || !sdk.storage?.get) return;
+  try {
+    const saved = await sdk.storage.get(THEME_STORAGE_KEY);
+    if (saved && THEME_SCHEMES.includes(saved.scheme)) {
+      const colors = { ...PALETTES[hostTheme()] };
+      for (const field of THEME_FIELDS) {
+        if (isHexColor(saved.colors?.[field])) colors[field] = saved.colors[field];
+      }
+      themeSettings = { scheme: saved.scheme, colors };
+      applyTheme();
+    }
+  } catch (error) {
+    console.warn("[terminal:theme-load]", error);
+  }
+}
+
+async function saveThemeSettings() {
+  if (!themeDraft) return;
+  const next = { scheme: themeDraft.scheme, colors: { ...themeDraft.colors } };
+  elements.themeSaveButton.disabled = true;
+  elements.themeStatus.textContent = "";
+  if (sdk?.capabilities?.storage && sdk.storage?.set) {
+    try {
+      await sdk.storage.set(THEME_STORAGE_KEY, next);
+    } catch (error) {
+      console.warn("[terminal:theme-save]", error);
+      elements.themeStatus.textContent = themeCopy[strings === copy.en ? "en" : "zh-CN"].saveError;
+      elements.themeSaveButton.disabled = false;
+      return;
+    }
+  }
+  themeSettings = next;
+  applyTheme();
+  elements.themeSaveButton.disabled = false;
+  elements.themeDialog.close();
+}
+
+function isHexColor(value) {
+  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
+}
+
+function hostTheme() {
+  return document.documentElement.dataset.dbxTheme === "dark" ? "dark" : "light";
+}
+
+function paletteFor(settings) {
+  return settings.scheme === "custom" ? settings.colors : PALETTES[settings.scheme === "host" ? hostTheme() : settings.scheme];
 }
 
 function updateInstanceLabel(instance) {
@@ -854,6 +997,10 @@ function setButtonLabel(button, label) {
 }
 
 function applyTheme() {
+  const palette = paletteFor(themeSettings);
+  document.documentElement.style.setProperty("--terminal-background", palette.background);
+  document.documentElement.style.setProperty("--terminal-foreground", palette.foreground);
+  document.documentElement.style.setProperty("--terminal-cursor", palette.command);
   const theme = terminalTheme();
   for (const instance of instances.values()) {
     instance.terminal.options.theme = theme;
@@ -862,14 +1009,13 @@ function applyTheme() {
 }
 
 function terminalTheme() {
-  const styles = getComputedStyle(document.documentElement);
-  const color = (name, fallback) => styles.getPropertyValue(name).trim() || fallback;
-  const dark = document.documentElement.dataset.dbxTheme === "dark";
+  const palette = paletteFor(themeSettings);
+  const dark = !isLightTheme();
   return {
-    background: color("--terminal-background", dark ? "#111315" : "#ffffff"),
-    foreground: color("--terminal-foreground", dark ? "#e7e9ec" : "#202327"),
-    cursor: color("--terminal-cursor", dark ? "#5ecf98" : "#087f5b"),
-    cursorAccent: color("--terminal-background", dark ? "#111315" : "#ffffff"),
+    background: palette.background,
+    foreground: palette.foreground,
+    cursor: palette.command,
+    cursorAccent: palette.background,
     selectionBackground: dark ? "#315f4e99" : "#90d5b899",
     black: dark ? "#25292d" : "#343a40",
     red: "#d34a4a",
@@ -877,21 +1023,22 @@ function terminalTheme() {
     yellow: "#b47813",
     blue: "#3d7fca",
     magenta: "#9b62b5",
-    cyan: "#258d9c",
-    white: dark ? "#d9dde1" : "#e9ecef",
-    brightBlack: "#737b84",
+    cyan: palette.string,
+    white: palette.foreground,
+    brightBlack: palette.symbol,
     brightRed: "#f06a6a",
     brightGreen: "#5ecf98",
-    brightYellow: "#e2ad45",
+    brightYellow: palette.command,
     brightBlue: "#69a7ec",
     brightMagenta: "#c68bdf",
     brightCyan: "#56bdc9",
-    brightWhite: "#ffffff",
+    brightWhite: palette.number,
   };
 }
 
 function isLightTheme() {
-  return document.documentElement.dataset.dbxTheme !== "dark";
+  const rgb = parseCssRgb(paletteFor(themeSettings).background);
+  return rgb && (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000 >= 128;
 }
 
 function isWindowsHost() {

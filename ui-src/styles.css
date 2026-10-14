@@ -364,7 +364,6 @@ button {
 .terminal .xterm,
 .terminal .xterm-viewport,
 .terminal .xterm-screen,
-.terminal .xterm-screen canvas,
 .terminal .xterm-scrollable-element,
 .terminal .xterm-rows {
   background-color: var(--terminal-background) !important;
@@ -437,6 +436,112 @@ button {
 
 .command-button:hover {
   border-color: var(--accent);
+}
+
+.theme-dialog {
+  width: min(380px, calc(100vw - 24px));
+  max-height: min(560px, calc(100dvh - 24px));
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 16px 48px #0004;
+}
+
+.theme-dialog::backdrop {
+  background: #0008;
+}
+
+.theme-header,
+.theme-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+}
+
+.theme-header {
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+
+.theme-header h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.theme-body {
+  padding: 14px;
+}
+
+.theme-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 36px;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.theme-field select {
+  width: 154px;
+  min-height: 28px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.theme-colors {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.theme-colors input[type="color"] {
+  width: 44px;
+  height: 26px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.theme-status {
+  margin: 6px 0 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.theme-status:empty {
+  display: none;
+}
+
+.theme-footer {
+  border-top: 1px solid var(--border);
+}
+
+.theme-footer-spacer {
+  flex: 1;
+}
+
+.theme-footer .primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.theme-dialog button:focus-visible,
+.theme-dialog select:focus-visible,
+.theme-dialog input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 [hidden] {
